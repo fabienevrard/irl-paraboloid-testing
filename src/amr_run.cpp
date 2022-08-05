@@ -406,14 +406,15 @@ void runRandomSweep(const std::string& a_geometry,
             &seg_half_edge, &half_edge, aligned_paraboloid, 17);
 
     // Move centroid to global reference frame
-    volume_moments.normalizeByVolume();
+    // volume_moments.normalizeByVolume();
     auto centroid = IRL::Pt(0.0, 0.0, 0.0);
     for (std::size_t d = 0; d < 3; ++d) {
       for (std::size_t n = 0; n < 3; ++n) {
         centroid[n] += frame[d][n] * volume_moments.centroid()[d];
       }
     }
-    centroid -= translations;
+    // centroid -= translations;
+    centroid -= translations * volume_moments.volume();
     volume_moments.centroid() = centroid;
 
     // Write case and result to file
@@ -429,6 +430,8 @@ void runRandomSweep(const std::string& a_geometry,
     a_out_file.write(reinterpret_cast<char*>(&volume_moments.volume()),
                      sizeof(double));
     a_out_file.write(reinterpret_cast<char*>(&centroid[0]), sizeof(double) * 3);
+    // std::cout << "M0 = " << volume_moments.volume()
+    //           << "; M1 = " << volume_moments.centroid() << std::endl;
   }
   std::cout << "100% done\n" << std::endl;
   delete connectivity;
@@ -556,14 +559,15 @@ void runOrganizedSweep(const std::string& a_geometry,
                                               aligned_paraboloid, 17);
 
                   // Move centroid to global reference frame
-                  volume_moments.normalizeByVolume();
+                  // volume_moments.normalizeByVolume();
                   auto centroid = IRL::Pt(0.0, 0.0, 0.0);
                   for (std::size_t d = 0; d < 3; ++d) {
                     for (std::size_t n = 0; n < 3; ++n) {
                       centroid[n] += frame[d][n] * volume_moments.centroid()[d];
                     }
                   }
-                  centroid -= translations;
+                  // centroid -= translations;
+                  centroid -= translations * volume_moments.volume();
                   volume_moments.centroid() = centroid;
 
                   // Write case and result to file
@@ -592,6 +596,9 @@ void runOrganizedSweep(const std::string& a_geometry,
                         reinterpret_cast<char*>(&volume_moments.centroid()[d]),
                         sizeof(volume_moments.centroid()[d]));
                   }
+                  // std::cout << "M0 = " << volume_moments.volume()
+                  //           << "; M1 = " << volume_moments.centroid()
+                  //           << std::endl;
                 }
               }
             }
@@ -611,8 +618,10 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
   IRL::PolyhedronConnectivity* connectivity = nullptr;
   if (a_geometry == "tet") {
     vertices = std::vector<IRL::Pt>{
-        {IRL::Pt(-0.5, -0.5, -0.5), IRL::Pt(0.5, -0.5, 0.5),
-         IRL::Pt(0.5, 0.5, 0.5), IRL::Pt(-0.5, -0.5, 0.5)}};
+        {IRL::Pt(1.0 / std::sqrt(3.0), 0.0, -1.0 / std::sqrt(6.0)),
+         IRL::Pt(-std::sqrt(3.0) / 6.0, 0.5, -1.0 / std::sqrt(6.0)),
+         IRL::Pt(-std::sqrt(3.0) / 6.0, -0.5, -1.0 / std::sqrt(6.0)),
+         IRL::Pt(0.0, 0.0, 1.0 / std::sqrt(6.0))}};
     std::array<std::array<IRL::UnsignedIndex_t, 3>, 4> face_mapping{
         {{0, 1, 3}, {1, 2, 3}, {1, 0, 2}, {0, 3, 2}}};
     connectivity = new IRL::PolyhedronConnectivity(face_mapping);
@@ -714,7 +723,24 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
     std::exit(-1);
   }
 
-  return std::make_pair(BasePolyhedron(vertices, connectivity), connectivity);
+  auto polyhedron = BasePolyhedron(vertices, connectivity);
+  // Normalize volume
+  const double normalization_factor =
+      1.0 / std::pow(polyhedron.calculateVolume(), 1.0 / 3.0);
+  for (auto& vertex : polyhedron) {
+    for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+      vertex[d] *= normalization_factor;
+    }
+  }
+  // Place centroid at origin
+  const auto centroid = polyhedron.calculateCentroid();
+  for (auto& vertex : polyhedron) {
+    for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+      vertex[d] -= centroid[d];
+    }
+  }
+
+  return std::make_pair(polyhedron, connectivity);
 }
 
 }  // namespace details

@@ -105,8 +105,25 @@ std::array<double, 10> confirmTranslatingCubeResult(
 struct TetCreator {
  public:
   static IRL::Tet create(void) {
-    return IRL::Tet({IRL::Pt(0.5, -0.5, 0.5), IRL::Pt(0.5, 0.5, 0.5),
-                     IRL::Pt(-0.5, -0.5, 0.5), IRL::Pt(-0.5, -0.5, -0.5)});
+    IRL::Tet tet =
+        IRL::Tet({IRL::Pt(-std::sqrt(3.0) / 6.0, 0.5, -1.0 / std::sqrt(6.0)),
+                  IRL::Pt(-std::sqrt(3.0) / 6.0, -0.5, -1.0 / std::sqrt(6.0)),
+                  IRL::Pt(0.0, 0.0, 1.0 / std::sqrt(6.0)),
+                  IRL::Pt(1.0 / std::sqrt(3.0), 0.0, -1.0 / std::sqrt(6.0))});
+    const double normalization_factor =
+        1.0 / std::pow(tet.calculateVolume(), 1.0 / 3.0);
+    for (auto& vertex : tet) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] *= normalization_factor;
+      }
+    }
+    const auto centroid = tet.calculateCentroid();
+    for (auto& vertex : tet) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] -= centroid[d];
+      }
+    }
+    return tet;
   }
 };
 
@@ -154,21 +171,50 @@ struct DodecahedronCreator {
       pt *= scale;
     }
 
-    return IRL::MyDodecahedron::fromRawPtPointer(vertex_list.size(),
-                                                 vertex_list.data());
+    IRL::MyDodecahedron dodeca = IRL::MyDodecahedron::fromRawPtPointer(
+        vertex_list.size(), vertex_list.data());
+    const double normalization_factor =
+        1.0 / std::pow(dodeca.calculateVolume(), 1.0 / 3.0);
+    for (auto& vertex : dodeca) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] *= normalization_factor;
+      }
+    }
+    const auto centroid = dodeca.calculateCentroid();
+    for (auto& vertex : dodeca) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] -= centroid[d];
+      }
+    }
+    return dodeca;
   }
 };
 
 struct CubeHoleCreator {
  public:
   static IRL::CubeHole create(void) {
-    return IRL::CubeHole({IRL::Pt(-0.5, -0.5, -0.5), IRL::Pt(-0.5, 0.5, -0.5),
-                          IRL::Pt(-0.5, 0.5, 0.5), IRL::Pt(-0.5, -0.5, 0.5),
-                          IRL::Pt(0.5, -0.5, -0.5), IRL::Pt(0.5, 0.5, -0.5),
-                          IRL::Pt(0.5, 0.5, 0.5), IRL::Pt(0.5, -0.5, 0.5),
-                          IRL::Pt(-0.25, 0.5, -0.25), IRL::Pt(-0.25, 0.5, 0.25),
-                          IRL::Pt(0.25, 0.5, -0.25), IRL::Pt(0.25, 0.5, 0.25),
-                          IRL::Pt(0.0, -0.25, 0.0)});
+    IRL::CubeHole cubehole =
+        IRL::CubeHole({IRL::Pt(-0.5, -0.5, -0.5), IRL::Pt(-0.5, 0.5, -0.5),
+                       IRL::Pt(-0.5, 0.5, 0.5), IRL::Pt(-0.5, -0.5, 0.5),
+                       IRL::Pt(0.5, -0.5, -0.5), IRL::Pt(0.5, 0.5, -0.5),
+                       IRL::Pt(0.5, 0.5, 0.5), IRL::Pt(0.5, -0.5, 0.5),
+                       IRL::Pt(-0.25, 0.5, -0.25), IRL::Pt(-0.25, 0.5, 0.25),
+                       IRL::Pt(0.25, 0.5, -0.25), IRL::Pt(0.25, 0.5, 0.25),
+                       IRL::Pt(0.0, -0.25, 0.0)});
+    const double normalization_factor =
+        1.0 / std::pow(cubehole.calculateVolume(), 1.0 / 3.0);
+    for (auto& vertex : cubehole) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] *= normalization_factor;
+      }
+    }
+    const auto centroid = cubehole.calculateCentroid();
+    for (auto& vertex : cubehole) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] -= centroid[d];
+      }
+    }
+    return cubehole;
   }
 };
 
@@ -276,7 +322,7 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
                                  start[6], start[7]);
       double start_time = omp_get_wtime();
       auto moments =
-          IRL::getNormalizedVolumeMoments<IRL::VolumeMoments>(geom, paraboloid);
+          IRL::getVolumeMoments<IRL::VolumeMoments>(geom, paraboloid);
       double end_time = omp_get_wtime();
       results[9] += end_time - start_time;
 
@@ -286,10 +332,18 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
       results[2] = std::max(results[2], volume_err);
 
       auto amr_centroid = IRL::Pt::fromRawDoublePointer(start + 9);
-      const double err_dist = magnitude(moments.centroid() - amr_centroid);
-      results[3] += err_dist;
-      results[4] += err_dist * err_dist;
-      results[5] = std::max(results[5], err_dist);
+      // const double err_dist = magnitude(moments.centroid() - amr_centroid);
+      // results[3] += err_dist;
+      // results[4] += err_dist * err_dist;
+      // results[5] = std::max(results[5], err_dist);
+      const double err_x = std::fabs(moments.centroid()[0] - amr_centroid[0]);
+      const double err_y = std::fabs(moments.centroid()[1] - amr_centroid[1]);
+      const double err_z = std::fabs(moments.centroid()[2] - amr_centroid[2]);
+      results[3] += err_x + err_y + err_z;
+      results[4] += err_x * err_x + err_y * err_y + err_z * err_z;
+      results[5] = std::max(results[5], err_x);
+      results[5] = std::max(results[5], err_y);
+      results[5] = std::max(results[5], err_z);
     }
     cases_run += batch_size;
   }
@@ -297,8 +351,8 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
   const double case_count = static_cast<double>(a_run_size);
   results[0] /= case_count;
   results[1] = std::sqrt(results[1]) / case_count;
-  results[3] /= case_count;
-  results[4] = std::sqrt(results[4]) / case_count;
+  results[3] /= 3 * case_count;
+  results[4] = std::sqrt(results[4]) / (3 * case_count);
   results[9] = results[9] / case_count;
 
   return results;

@@ -1,9 +1,26 @@
 {
   "test_name": "translating_cube",
   "out_file_name": "trans.bin",
-  "TranslatingCube":{
-    "side_length": 2.0,
-    "ranges": [[0.0,0.1],[0.1,0.9],[0.9,1.0]],
-    "steps": [1000,10000, 1000]
+  "TranslatingCube": {
+    "side_length": 1.0,
+    "ranges": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        3.0
+      ]
+    ],
+    "steps": [
+      0,
+      0,
+      1000
+    ]
   }
 }

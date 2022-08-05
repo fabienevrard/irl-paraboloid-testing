@@ -1,0 +1,44 @@
+{
+    "test_name": "parameter_sweep",
+    "out_file_name": "random_tet.bin",
+    "Sweep": {
+        "geometry": "tet",
+        "random": true,
+        "fix_to_paraboloid": false,
+        "translation": [
+            [
+                -0.5,
+                -0.5,
+                -0.5
+            ],
+            [
+                0.5,
+                0.5,
+                0.5
+            ]
+        ],
+        "rotation": [
+            [
+                -1.58,
+                -1.58,
+                -1.58
+            ],
+            [
+                1.58,
+                1.58,
+                1.58
+            ]
+        ],
+        "coefficient": [
+            [
+                -5.0,
+                -5.0
+            ],
+            [
+                5.0,
+                5.0
+            ]
+        ],
+        "number_of_tests": 1e2
+    }
+}
