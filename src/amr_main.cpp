@@ -31,12 +31,21 @@ int main(int argc, char** argv) {
 
   const auto test_name = input["test_name"].get<std::string>();
   const auto file_name = input["out_file_name"].get<std::string>();
-  std::fstream file(file_name, file.binary | file.trunc | file.out);
+  std::fstream file;
 
-  std::string json_string = input.dump();
-  std::size_t string_length = json_string.size();
-  file.write(reinterpret_cast<char*>(&string_length), sizeof(std::size_t));
-  file.write(json_string.c_str(), string_length);
+  /* MPI setup */
+  int rank, size;
+  MPI_Init(NULL, NULL);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  if (rank == 0) {
+    file.open(file_name, file.binary | file.trunc | file.out);
+    std::string json_string = input.dump();
+    std::size_t string_length = json_string.size();
+    file.write(reinterpret_cast<char*>(&string_length), sizeof(std::size_t));
+    file.write(json_string.c_str(), string_length);
+  }
 
   if (test_name == "face_only") {
   } else if (test_name == "basic_cube") {
@@ -126,4 +135,10 @@ int main(int argc, char** argv) {
     std::cout << "Unkown test type \"" + test_name + "\"" << std::endl;
     std::exit(-1);
   }
+
+  if (rank == 0) {
+    file.close();
+  }
+
+  MPI_Finalize();
 }

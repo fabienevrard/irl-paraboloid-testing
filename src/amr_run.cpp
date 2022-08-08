@@ -308,12 +308,33 @@ void runRandomSweep(const std::string& a_geometry,
                     const bool a_fix_to_paraboloid,
                     const std::size_t a_number_of_tests,
                     std::fstream& a_out_file) {
+  /* MPI setup */
+  int rank, size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  std::size_t count_printed = 0;
+
+  const std::size_t number_of_tests_per_core =
+      size == 1 ? a_number_of_tests : a_number_of_tests / (size - 1);
+  const std::size_t number_of_tests_this_core =
+      (rank == 0 && size > 1) ? a_number_of_tests % (size - 1)
+                              : number_of_tests_per_core;
+  const std::size_t batch_size = number_of_tests_per_core < RUN_BATCH_SIZE
+                                     ? number_of_tests_per_core
+                                     : RUN_BATCH_SIZE;
+  std::vector<double> batch_data;
+  batch_data.resize(12 * batch_size);
+
+  /* Random sweep */
   auto geometry_and_connectivity = details::getGeometry(a_geometry);
   auto& geometry = geometry_and_connectivity.first;
   auto& connectivity = geometry_and_connectivity.second;
 
   std::random_device rd;
-  std::mt19937_64 eng(rd());
+  int seed = static_cast<int>(rd());
+  MPI_Bcast(&seed, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  std::mt19937_64 eng(static_cast<unsigned int>(seed) + rank);
 
   std::vector<std::uniform_real_distribution<double>> random_rotations(3);
   std::vector<std::uniform_real_distribution<double>> random_translations(3);
@@ -336,12 +357,13 @@ void runRandomSweep(const std::string& a_geometry,
                                      IRL::Normal(0.0, 0.0, 1.0));
 
   std::size_t update_frequency =
-      std::min(static_cast<std::size_t>(1000), a_number_of_tests / 10);
-  for (std::size_t i = 0; i < a_number_of_tests; ++i) {
-    if (i % update_frequency == 0) {
-      std::cout << static_cast<int>(static_cast<double>(i) /
-                                    static_cast<double>(a_number_of_tests) *
-                                    100.0)
+      std::min(static_cast<std::size_t>(1000), number_of_tests_per_core / 10);
+  for (std::size_t i = 0; i < number_of_tests_per_core; ++i) {
+    std::size_t j = i % batch_size;
+    if (rank == 0 && i % update_frequency == 0) {
+      std::cout << static_cast<int>(
+                       static_cast<double>(i) /
+                       static_cast<double>(number_of_tests_per_core) * 100.0)
                 << "% done\n";
     }
     std::array<double, 3> angles{{random_rotations[0](eng),
@@ -417,23 +439,70 @@ void runRandomSweep(const std::string& a_geometry,
     centroid -= translations * volume_moments.volume();
     volume_moments.centroid() = centroid;
 
-    // Write case and result to file
-    // Translations, rotations, then coefficients (8 doubles total)
-    a_out_file.write(reinterpret_cast<char*>(&translations[0]),
-                     sizeof(double) * 3);
-    a_out_file.write(reinterpret_cast<char*>(&angles[0]), sizeof(double) * 3);
-    a_out_file.write(reinterpret_cast<char*>(&aligned_paraboloid.a()),
-                     sizeof(double));
-    a_out_file.write(reinterpret_cast<char*>(&aligned_paraboloid.b()),
-                     sizeof(double));
-    // Volume and centroid (four doubles total)
-    a_out_file.write(reinterpret_cast<char*>(&volume_moments.volume()),
-                     sizeof(double));
-    a_out_file.write(reinterpret_cast<char*>(&centroid[0]), sizeof(double) * 3);
-    // std::cout << "M0 = " << volume_moments.volume()
-    //           << "; M1 = " << volume_moments.centroid() << std::endl;
+    // Store data before sending to proc 0
+    for (std::size_t d = 0; d < 3; ++d) {
+      batch_data[12 * j + d] = translations[d];
+      batch_data[12 * j + 3 + d] = angles[d];
+      batch_data[12 * j + 9 + d] = centroid[d];
+    }
+    batch_data[12 * j + 6] = aligned_paraboloid.a();
+    batch_data[12 * j + 7] = aligned_paraboloid.b();
+    batch_data[12 * j + 8] = volume_moments.volume();
+
+    // If root: write data
+    if (rank == 0 && i < number_of_tests_this_core &&
+        (j == batch_size - 1 || i == number_of_tests_this_core - 1)) {
+      std::size_t true_batch_size = j + 1;
+      a_out_file.write(reinterpret_cast<char*>(&(batch_data.data()[0])),
+                       12 * true_batch_size * sizeof(double));
+      count_printed += true_batch_size;
+    }
+
+    // Else: Send back to proc 0
+    if (j == batch_size - 1 || i == number_of_tests_per_core - 1) {
+      std::size_t true_batch_size = j + 1;
+      if (rank == 0) {
+        for (std::size_t r = 1; r < size; ++r) {
+          MPI_Status status;
+          MPI_Recv(batch_data.data(), 12 * true_batch_size, MPI_DOUBLE, r,
+                   1234 + r, MPI_COMM_WORLD, &status);
+          a_out_file.write(reinterpret_cast<char*>(&(batch_data.data()[0])),
+                           12 * true_batch_size * sizeof(double));
+          count_printed += true_batch_size;
+        }
+      } else {
+        MPI_Send(batch_data.data(), 12 * true_batch_size, MPI_DOUBLE, 0,
+                 1234 + rank, MPI_COMM_WORLD);
+      }
+    }
+
+    // // Write case and result to file
+    // // Translations, rotations, then coefficients (8 doubles total)
+    // a_out_file.write(reinterpret_cast<char*>(&translations[0]),
+    //                  sizeof(double) * 3);
+    // a_out_file.write(reinterpret_cast<char*>(&angles[0]), sizeof(double) *
+    // 3); a_out_file.write(reinterpret_cast<char*>(&aligned_paraboloid.a()),
+    //                  sizeof(double));
+    // a_out_file.write(reinterpret_cast<char*>(&aligned_paraboloid.b()),
+    //                  sizeof(double));
+    // // Volume and centroid (four doubles total)
+    // a_out_file.write(reinterpret_cast<char*>(&volume_moments.volume()),
+    //                  sizeof(double));
+    // a_out_file.write(reinterpret_cast<char*>(&centroid[0]), sizeof(double) *
+    // 3);
+    // // std::cout << "M0 = " << volume_moments.volume()
+    // //           << "; M1 = " << volume_moments.centroid() << std::endl;
   }
-  std::cout << "100% done\n" << std::endl;
+  if (rank == 0) {
+    std::cout << "100% done" << std::endl;
+    if (count_printed != a_number_of_tests) {
+      std::cout << "ERROR: printed " << count_printed << " results instead of "
+                << a_number_of_tests << "!" << std::endl;
+    } else {
+      std::cout << "SUCCESS: printed " << count_printed << " results !"
+                << std::endl;
+    }
+  }
   delete connectivity;
 }
 

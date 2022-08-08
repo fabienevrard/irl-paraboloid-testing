@@ -10,10 +10,13 @@
 #ifndef SRC_AMR_RUN_H_
 #define SRC_AMR_RUN_H_
 
+#include <mpi.h>
 #include <array>
 #include <fstream>
 #include <string>
 #include <vector>
+
+static constexpr std::size_t RUN_BATCH_SIZE = 1000;
 
 // Writes out a binary file with 6 doubles per case, organized as
 // 1. k value (determines paraboloid positioning for case)

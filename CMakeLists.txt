@@ -28,6 +28,7 @@ set(JSON "${PROJECT_SOURCE_DIR}/external/json/single_include")
 # Find external packages needed by IRL
 find_package(Eigen) # Provide -D EIGEN_PATH=/path/to/Eigen
 find_package(OpenMP REQUIRED)
+find_package(MPI REQUIRED)
 
 # Add AMR executable
 add_executable(amr_generate_result)
@@ -42,6 +43,7 @@ target_include_directories(amr_generate_result PRIVATE "./")
 target_link_libraries(amr_generate_result PUBLIC "${IRL_INSTALL_LOCATION}/lib/libirl.a")
 target_link_libraries(amr_generate_result PUBLIC "${IRL_INSTALL_LOCATION}/lib/libabsl_all.a")
 target_link_libraries(amr_generate_result PUBLIC "-lpthread")
+target_link_libraries(amr_generate_result PUBLIC MPI::MPI_CXX)
 if(APPLE)
   target_link_libraries(amr_generate_result PUBLIC "-framework CoreFoundation")
 endif()
@@ -52,6 +54,7 @@ target_include_directories(amr_generate_result SYSTEM PUBLIC "${IRL_ROOT_LOCATIO
 target_include_directories(amr_generate_result SYSTEM PUBLIC "${JSON}")
 target_link_libraries(amr_generate_result INTERFACE PUBLIC Eigen::Eigen)
 target_include_directories(amr_generate_result SYSTEM PUBLIC "")
+target_include_directories(amr_generate_result SYSTEM PUBLIC "${MPI_INCLUDE_PATH}")
 
 
 # Add IRL executable
