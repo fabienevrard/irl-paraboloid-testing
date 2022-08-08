@@ -358,12 +358,15 @@ void runRandomSweep(const std::string& a_geometry,
 
   std::size_t update_frequency =
       std::min(static_cast<std::size_t>(1000), number_of_tests_per_core / 10);
-  for (std::size_t i = 0; i < number_of_tests_per_core; ++i) {
+  for (std::size_t i = 0;
+       i < std::max(number_of_tests_per_core, number_of_tests_this_core); ++i) {
     std::size_t j = i % batch_size;
     if (rank == 0 && i % update_frequency == 0) {
-      std::cout << static_cast<int>(
-                       static_cast<double>(i) /
-                       static_cast<double>(number_of_tests_per_core) * 100.0)
+      std::cout << static_cast<int>(static_cast<double>(i) /
+                                    static_cast<double>(
+                                        std::max(number_of_tests_per_core,
+                                                 number_of_tests_this_core)) *
+                                    100.0)
                 << "% done\n";
     }
     std::array<double, 3> angles{{random_rotations[0](eng),
@@ -375,79 +378,81 @@ void runRandomSweep(const std::string& a_geometry,
     IRL::AlignedParaboloid aligned_paraboloid(
         std::array<double, 2>({random_coeffs[0](eng), random_coeffs[1](eng)}));
 
-    auto geom = geometry;
+    if (i < number_of_tests_per_core) {
+      auto geom = geometry;
 
-    if (a_fix_to_paraboloid) translations[2] = 0.0;
+      if (a_fix_to_paraboloid) translations[2] = 0.0;
 
-    IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
-    IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
-    IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
-    auto frame = x_rotation * y_rotation * z_rotation * original_frame;
-    for (auto& vertex : geom) {
-      IRL::Pt tmp_pt = vertex + translations;
-      for (std::size_t d = 0; d < 3; ++d) {
-        vertex[d] = frame[d] * tmp_pt;
-      }
-    }
-
-    if (a_fix_to_paraboloid) {
-      double local_space_translation = 0.0;
-      auto& vertex = geom[0];
-      local_space_translation =
-          -aligned_paraboloid.a() * vertex[0] * vertex[0] -
-          aligned_paraboloid.b() * vertex[1] * vertex[1] - vertex[2];
+      IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
+      IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
+      IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
+      auto frame = x_rotation * y_rotation * z_rotation * original_frame;
       for (auto& vertex : geom) {
-        vertex[2] += local_space_translation;
+        IRL::Pt tmp_pt = vertex + translations;
+        for (std::size_t d = 0; d < 3; ++d) {
+          vertex[d] = frame[d] * tmp_pt;
+        }
       }
-      translations += local_space_translation * frame[2];
-    }
 
-    geom.setHalfEdgeVersion(&half_edge);
-    auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
-
-    for (auto& face : seg_half_edge) {
-      auto normal = IRL::Normal(0.0, 0.0, 0.0);
-      const auto starting_half_edge = face->getStartingHalfEdge();
-      auto current_half_edge = starting_half_edge;
-      auto next_half_edge = starting_half_edge->getNextHalfEdge();
-      const auto& start_location =
-          starting_half_edge->getPreviousVertex()->getLocation();
-      do {
-        normal += IRL::crossProduct(
-            current_half_edge->getVertex()->getLocation() - start_location,
-            next_half_edge->getVertex()->getLocation() - start_location);
-        current_half_edge = next_half_edge;
-        next_half_edge = next_half_edge->getNextHalfEdge();
-      } while (next_half_edge != starting_half_edge);
-      normal.normalize();
-      face->setPlane(IRL::Plane(normal, normal * start_location));
-    }
-
-    auto volume_moments =
-        IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
-            &seg_half_edge, &half_edge, aligned_paraboloid, 17);
-
-    // Move centroid to global reference frame
-    // volume_moments.normalizeByVolume();
-    auto centroid = IRL::Pt(0.0, 0.0, 0.0);
-    for (std::size_t d = 0; d < 3; ++d) {
-      for (std::size_t n = 0; n < 3; ++n) {
-        centroid[n] += frame[d][n] * volume_moments.centroid()[d];
+      if (a_fix_to_paraboloid) {
+        double local_space_translation = 0.0;
+        auto& vertex = geom[0];
+        local_space_translation =
+            -aligned_paraboloid.a() * vertex[0] * vertex[0] -
+            aligned_paraboloid.b() * vertex[1] * vertex[1] - vertex[2];
+        for (auto& vertex : geom) {
+          vertex[2] += local_space_translation;
+        }
+        translations += local_space_translation * frame[2];
       }
-    }
-    // centroid -= translations;
-    centroid -= translations * volume_moments.volume();
-    volume_moments.centroid() = centroid;
 
-    // Store data before sending to proc 0
-    for (std::size_t d = 0; d < 3; ++d) {
-      batch_data[12 * j + d] = translations[d];
-      batch_data[12 * j + 3 + d] = angles[d];
-      batch_data[12 * j + 9 + d] = centroid[d];
+      geom.setHalfEdgeVersion(&half_edge);
+      auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
+
+      for (auto& face : seg_half_edge) {
+        auto normal = IRL::Normal(0.0, 0.0, 0.0);
+        const auto starting_half_edge = face->getStartingHalfEdge();
+        auto current_half_edge = starting_half_edge;
+        auto next_half_edge = starting_half_edge->getNextHalfEdge();
+        const auto& start_location =
+            starting_half_edge->getPreviousVertex()->getLocation();
+        do {
+          normal += IRL::crossProduct(
+              current_half_edge->getVertex()->getLocation() - start_location,
+              next_half_edge->getVertex()->getLocation() - start_location);
+          current_half_edge = next_half_edge;
+          next_half_edge = next_half_edge->getNextHalfEdge();
+        } while (next_half_edge != starting_half_edge);
+        normal.normalize();
+        face->setPlane(IRL::Plane(normal, normal * start_location));
+      }
+
+      auto volume_moments =
+          IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
+              &seg_half_edge, &half_edge, aligned_paraboloid, 17);
+
+      // Move centroid to global reference frame
+      // volume_moments.normalizeByVolume();
+      auto centroid = IRL::Pt(0.0, 0.0, 0.0);
+      for (std::size_t d = 0; d < 3; ++d) {
+        for (std::size_t n = 0; n < 3; ++n) {
+          centroid[n] += frame[d][n] * volume_moments.centroid()[d];
+        }
+      }
+      // centroid -= translations;
+      centroid -= translations * volume_moments.volume();
+      volume_moments.centroid() = centroid;
+
+      // Store data before sending to proc 0
+      for (std::size_t d = 0; d < 3; ++d) {
+        batch_data[12 * j + d] = translations[d];
+        batch_data[12 * j + 3 + d] = angles[d];
+        batch_data[12 * j + 9 + d] = centroid[d];
+      }
+      batch_data[12 * j + 6] = aligned_paraboloid.a();
+      batch_data[12 * j + 7] = aligned_paraboloid.b();
+      batch_data[12 * j + 8] = volume_moments.volume();
     }
-    batch_data[12 * j + 6] = aligned_paraboloid.a();
-    batch_data[12 * j + 7] = aligned_paraboloid.b();
-    batch_data[12 * j + 8] = volume_moments.volume();
 
     // If root: write data
     if (rank == 0 && i < number_of_tests_this_core &&
@@ -459,7 +464,8 @@ void runRandomSweep(const std::string& a_geometry,
     }
 
     // Else: Send back to proc 0
-    if (j == batch_size - 1 || i == number_of_tests_per_core - 1) {
+    if (i < number_of_tests_per_core &&
+        (j == batch_size - 1 || i == number_of_tests_per_core - 1)) {
       std::size_t true_batch_size = j + 1;
       if (rank == 0) {
         for (std::size_t r = 1; r < size; ++r) {
