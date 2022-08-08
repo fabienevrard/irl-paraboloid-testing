@@ -39,6 +39,8 @@ int main(int argc, char** argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+  double start_time = omp_get_wtime();
+
   if (rank == 0) {
     file.open(file_name, file.binary | file.trunc | file.out);
     std::string json_string = input.dump();
@@ -136,8 +138,12 @@ int main(int argc, char** argv) {
     std::exit(-1);
   }
 
+  double end_time = omp_get_wtime();
+
   if (rank == 0) {
     file.close();
+    std::cout << "Results generated in " << end_time - start_time << " seconds"
+              << std::endl;
   }
 
   MPI_Finalize();
