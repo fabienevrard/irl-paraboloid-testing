@@ -18,8 +18,8 @@
 #include "irl/geometry/polyhedrons/general_polyhedron.h"
 #include "irl/helpers/mymath.h"
 
+#include "src/bunny.h"
 #include "src/cube_hole.h"
-#include "src/irl_poly.h"
 #include "src/my_dodecahedron.h"
 
 std::array<double, 10> confirmTranslatingCubeResult(
@@ -219,43 +219,55 @@ struct CubeHoleCreator {
   }
 };
 
-struct IRLCreator {
+struct BunnyCreator {
  public:
-  static IRL::IRLPoly create(void) {
-    std::vector<IRL::Pt> I{
-        {IRL::Pt(0.0, 0.0, 0.0),   IRL::Pt(1.0, 0.0, 0.0),
-         IRL::Pt(1.0, 0.15, 0.0),  IRL::Pt(0.6, 0.15, 0.0),
-         IRL::Pt(0.6, 0.85, 0.0),  IRL::Pt(1.0, 0.85, 0.0),
-         IRL::Pt(1.0, 1.0, 0.0),   IRL::Pt(0.0, 1.0, 0.0),
-         IRL::Pt(0.0, 0.85, 0.0),  IRL::Pt(0.4, 0.85, 0.0),
-         IRL::Pt(0.4, 0.15, 0.0),  IRL::Pt(0.0, 0.15, 0.0),
-         IRL::Pt(0.0, 0.0, -1.0),  IRL::Pt(1.0, 0.0, -1.0),
-         IRL::Pt(1.0, 0.15, -1.0), IRL::Pt(0.6, 0.15, -1.0),
-         IRL::Pt(0.6, 0.85, -1.0), IRL::Pt(1.0, 0.85, -1.0),
-         IRL::Pt(1.0, 1.0, -1.0),  IRL::Pt(0.0, 1.0, -1.0),
-         IRL::Pt(0.0, 0.85, -1.0), IRL::Pt(0.4, 0.85, -1.0),
-         IRL::Pt(0.4, 0.15, -1.0), IRL::Pt(0.0, 0.15, -1.0)}};
-    // Left off on Pt 33
-    std::vector<IRL::Pt> R = {
-        {IRL::Pt(1.1, 0.0, 0.0), IRL::Pt(1.25, 0.0, 0.0),
-         IRL::Pt(1.25, 1.0, 0.0), IRL::Pt(1.1, 1.0, 0.0),
-         IRL::Pt(1.1, 0.0, -1.0), IRL::Pt(1.25, 0.0, -1.0),
-         IRL::Pt(1.25, 1.0, -1.0), IRL::Pt(1.1, 1.0, -1.0)}};
+  static IRL::Bunny create(void) {
+    std::ifstream myfile("../vtk_data/bunny.vtk");
+    std::string line;
+    char space_char = ' ';
+    std::vector<IRL::Pt> vertices{};
+    if (myfile.is_open()) {
+      std::vector<std::string> words{};
+      bool read_points = false;
+      while (getline(myfile, line)) {
+        std::stringstream line_stream(line);
+        std::string split_line;
+        while (std::getline(line_stream, split_line, space_char)) {
+          words.push_back(split_line);
+        }
 
-    std::vector<IRL::Pt> total(I.size() + R.size());
-    std::size_t count = 0;
-    for (auto& pt : I) {
-      total[count++] = pt;
+        if (read_points) {
+          for (unsigned i = 0; i < words.size() / 3; i++) {
+            vertices.push_back(IRL::Pt(std::stod(words[3 * i + 0]),
+                                       std::stod(words[3 * i + 1]),
+                                       std::stod(words[3 * i + 2])));
+          }
+        }
+        if (words.size() == 0) {
+          read_points = false;
+        } else if (words[0] == "POINTS") {
+          read_points = true;
+        }
+        words.clear();
+      }
+      myfile.close();
     }
-    for (auto& pt : R) {
-      total[count++] = pt;
+
+    auto bunny = IRL::Bunny::fromRawPtPointer(vertices.size(), vertices.data());
+    const double normalization_factor =
+        1.0 / std::pow(bunny.calculateVolume(), 1.0 / 3.0);
+    for (auto& vertex : bunny) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] *= normalization_factor;
+      }
     }
-    auto poly = IRL::IRLPoly::fromRawPtPointer(total.size(), total.data());
-    const IRL::Pt shift(-1.6, -0.5, 0.5);
-    for (auto& vertex : poly) {
-      vertex += shift;
+    const auto centroid = bunny.calculateCentroid();
+    for (auto& vertex : bunny) {
+      for (IRL::UnsignedIndex_t d = 0; d < 3; ++d) {
+        vertex[d] -= centroid[d];
+      }
     }
-    return poly;
+    return bunny;
   }
 };
 
@@ -271,10 +283,8 @@ inline std::array<double, 10> confirmParameterSweepResult(
                                                       a_results_file);
   } else if (a_geometry == "cube_hole") {
     return performParameterSweep<CubeHoleCreator>(a_run_size, a_results_file);
-  } else if (a_geometry == "IRL") {
-    std::cout << "Building of IRL poly is broken" << std::endl;
-    std::exit(-1);
-    return performParameterSweep<IRLCreator>(a_run_size, a_results_file);
+  } else if (a_geometry == "bunny") {
+    return performParameterSweep<BunnyCreator>(a_run_size, a_results_file);
   } else {
     std::cout << "Unkown geometry type \"" + a_geometry + "\"" << std::endl;
     std::exit(-1);

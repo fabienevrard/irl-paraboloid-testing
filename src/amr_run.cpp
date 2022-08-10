@@ -800,13 +800,65 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
 
     connectivity = new IRL::PolyhedronConnectivity(face_mapping);
 
-  } else if (a_geometry == "IRL") {
+  } else if (a_geometry == "bunny") {
+    std::ifstream myfile("../vtk_data/bunny.vtk");
+    std::string line;
+    char space_char = ' ';
+    std::vector<std::array<IRL::UnsignedIndex_t, 3>> face_mapping{};
+    if (myfile.is_open()) {
+      std::vector<std::string> words{};
+      bool read_points = false;
+      bool read_connectivity = false;
+      while (getline(myfile, line)) {
+        std::stringstream line_stream(line);
+        std::string split_line;
+        while (std::getline(line_stream, split_line, space_char)) {
+          words.push_back(split_line);
+        }
+
+        if (read_points) {
+          for (unsigned i = 0; i < words.size() / 3; i++) {
+            vertices.push_back(IRL::Pt(std::stod(words[3 * i + 0]),
+                                       std::stod(words[3 * i + 1]),
+                                       std::stod(words[3 * i + 2])));
+          }
+        }
+        if (read_connectivity) {
+          for (unsigned i = 0; i < words.size() / 3; i++) {
+            face_mapping.push_back(std::array<IRL::UnsignedIndex_t, 3>{
+                static_cast<IRL::UnsignedIndex_t>(std::stoi(words[3 * i + 0])),
+                static_cast<IRL::UnsignedIndex_t>(std::stoi(words[3 * i + 1])),
+                static_cast<IRL::UnsignedIndex_t>(
+                    std::stoi(words[3 * i + 2]))});
+          }
+        }
+        if (words.size() == 0) {
+          read_points = false;
+          read_connectivity = false;
+        } else if (words[0] == "POINTS") {
+          read_points = true;
+        } else if (words[0] == "CONNECTIVITY") {
+          read_connectivity = true;
+        } else if (words[0] == "CELL_DATA") {
+          read_connectivity = false;
+        }
+        words.clear();
+      }
+      myfile.close();
+    }
+    std::cout << "The bunny has " << vertices.size() << " vertices!"
+              << std::endl;
+    std::cout << "The bunny has " << face_mapping.size() << " triangles!"
+              << std::endl;
+
+    connectivity = new IRL::PolyhedronConnectivity(face_mapping);
   } else {
     std::cout << "Unkown geometry type \"" + a_geometry + "\"" << std::endl;
     std::exit(-1);
   }
 
   auto polyhedron = BasePolyhedron(vertices, connectivity);
+
   // Normalize volume
   const double normalization_factor =
       1.0 / std::pow(polyhedron.calculateVolume(), 1.0 / 3.0);
