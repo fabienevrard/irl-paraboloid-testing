@@ -37,12 +37,12 @@ ProxyTet<Derived> getSimplexFromDecomposition(const UnsignedIndex_t a_tet) const
 }; 
 
 template <class VertexType>
-class StoredCubeHole: public StoredVertexAccess<StoredCubeHole<VertexType>,VertexType,13>, public CubeHoleSpecialization<StoredCubeHole<VertexType>, VertexType>{
-friend StoredVertexAccess<StoredCubeHole<VertexType>,VertexType,13>;
+class StoredCubeHole: public StoredVertexAccess<StoredCubeHole<VertexType>,VertexType,16>, public CubeHoleSpecialization<StoredCubeHole<VertexType>, VertexType>{
+friend StoredVertexAccess<StoredCubeHole<VertexType>,VertexType,16>;
 
 public: 
 
-using StoredVertexAccess<StoredCubeHole<VertexType>,VertexType,13>::StoredVertexAccess;
+using StoredVertexAccess<StoredCubeHole<VertexType>,VertexType,16>::StoredVertexAccess;
 
 StoredCubeHole(void) = default;
 }; 

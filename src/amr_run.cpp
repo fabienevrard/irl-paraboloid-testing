@@ -774,21 +774,23 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
          IRL::Pt(0.5, -0.5, -0.5), IRL::Pt(0.5, 0.5, -0.5),
          IRL::Pt(0.5, 0.5, 0.5), IRL::Pt(0.5, -0.5, 0.5),
          IRL::Pt(-0.25, 0.5, -0.25), IRL::Pt(-0.25, 0.5, 0.25),
-         IRL::Pt(0.25, 0.5, -0.25), IRL::Pt(0.25, 0.5, 0.25),
-         IRL::Pt(0.0, -0.25, 0.0)}};
+         IRL::Pt(0.25, 0.5, 0.25), IRL::Pt(0.25, 0.5, -0.25),
+         IRL::Pt(-0.25, -0.5, -0.25), IRL::Pt(-0.25, -0.5, 0.25),
+         IRL::Pt(0.25, -0.5, 0.25), IRL::Pt(0.25, -0.5, -0.25)}};
 
-    std::vector<std::vector<IRL::UnsignedIndex_t>> face_mapping(11);
+    std::vector<std::vector<IRL::UnsignedIndex_t>> face_mapping(12);
     face_mapping[0] = std::vector<IRL::UnsignedIndex_t>{{3, 2, 1, 0}};
     face_mapping[1] = std::vector<IRL::UnsignedIndex_t>{{0, 1, 5, 4}};
     face_mapping[2] = std::vector<IRL::UnsignedIndex_t>{{4, 5, 6, 7}};
     face_mapping[3] = std::vector<IRL::UnsignedIndex_t>{{6, 2, 3, 7}};
-    face_mapping[4] = std::vector<IRL::UnsignedIndex_t>{{1, 2, 6, 5}};
-    face_mapping[5] = std::vector<IRL::UnsignedIndex_t>{{0, 4, 7, 3}};
-    face_mapping[6] = std::vector<IRL::UnsignedIndex_t>{{9, 8, 10, 11}};
-    face_mapping[7] = std::vector<IRL::UnsignedIndex_t>{{8, 9, 12}};
-    face_mapping[8] = std::vector<IRL::UnsignedIndex_t>{{9, 11, 12}};
-    face_mapping[9] = std::vector<IRL::UnsignedIndex_t>{{11, 10, 12}};
-    face_mapping[10] = std::vector<IRL::UnsignedIndex_t>{{10, 8, 12}};
+    face_mapping[4] = std::vector<IRL::UnsignedIndex_t>{{1, 2, 6, 10, 9, 8}};
+    face_mapping[5] = std::vector<IRL::UnsignedIndex_t>{{6, 5, 1, 8, 11, 10}};
+    face_mapping[6] = std::vector<IRL::UnsignedIndex_t>{{0, 4, 7, 14, 15, 12}};
+    face_mapping[7] = std::vector<IRL::UnsignedIndex_t>{{7, 3, 0, 12, 13, 14}};
+    face_mapping[8] = std::vector<IRL::UnsignedIndex_t>{{8, 9, 13, 12}};
+    face_mapping[9] = std::vector<IRL::UnsignedIndex_t>{{9, 10, 14, 13}};
+    face_mapping[10] = std::vector<IRL::UnsignedIndex_t>{{10, 11, 15, 14}};
+    face_mapping[11] = std::vector<IRL::UnsignedIndex_t>{{11, 8, 12, 15}};
 
     connectivity = new IRL::PolyhedronConnectivity(face_mapping);
 
