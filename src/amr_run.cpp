@@ -323,6 +323,12 @@ void runRandomSweep(const std::string& a_geometry,
   const std::size_t batch_size = number_of_tests_per_core < RUN_BATCH_SIZE
                                      ? number_of_tests_per_core
                                      : RUN_BATCH_SIZE;
+  if (rank == 0) {
+    std::cout << "Rank 0 has " << number_of_tests_this_core
+              << " evals; others have " << number_of_tests_per_core << " evals"
+              << std::endl;
+    std::cout << "Batch size = " << batch_size << std::endl;
+  }
   std::vector<double> batch_data;
   batch_data.resize(12 * batch_size);
 
@@ -357,17 +363,17 @@ void runRandomSweep(const std::string& a_geometry,
                                      IRL::Normal(0.0, 0.0, 1.0));
 
   std::size_t update_frequency =
-      std::min(static_cast<std::size_t>(1000), number_of_tests_per_core / 10);
+      std::min(static_cast<std::size_t>(1e3), number_of_tests_per_core / 10);
   for (std::size_t i = 0;
        i < std::max(number_of_tests_per_core, number_of_tests_this_core); ++i) {
     std::size_t j = i % batch_size;
-    if (rank == 0 && i % update_frequency == 0) {
+    if ((size == 1 || rank == 1) && (i % update_frequency == 0)) {
       std::cout << static_cast<int>(static_cast<double>(i) /
                                     static_cast<double>(
                                         std::max(number_of_tests_per_core,
                                                  number_of_tests_this_core)) *
                                     100.0)
-                << "% done\n";
+                << "% done (" << i * size << " evals)\n";
     }
     std::array<double, 3> angles{{random_rotations[0](eng),
                                   random_rotations[1](eng),
