@@ -39,6 +39,6 @@
                 5.0
             ]
         ],
-        "number_of_tests": 1e2
+        "number_of_tests": 1e4
     }
 }
