@@ -11,6 +11,9 @@
 #define SRC_IRL_RUN_TPP_
 
 #include <omp.h>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
 
 #include "irl/generic_cutting/generic_cutting.h"
 #include "irl/generic_cutting/paraboloid_intersection/paraboloid_intersection_amr.h"
@@ -225,7 +228,7 @@ struct BunnyCreator {
     std::ifstream myfile("../vtk_data/bunny.vtk");
     std::string line;
     char space_char = ' ';
-    std::vector<IRL::Pt> vertices{};
+    std::vector<IRL::Pt> vertices;
     if (myfile.is_open()) {
       std::vector<std::string> words{};
       bool read_points = false;
@@ -243,7 +246,7 @@ struct BunnyCreator {
                                        std::stod(words[3 * i + 2])));
           }
         }
-        if (words.size() == 0) {
+        if (words.size() == 0 || words[0] == "METADATA") {
           read_points = false;
         } else if (words[0] == "POINTS") {
           read_points = true;
@@ -295,6 +298,7 @@ template <class GeometryType>
 std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
                                              std::fstream& a_results_file) {
   static constexpr std::size_t DOUBLES_IN_ONE_RUN = 12;
+  std::cout << "Starting parameter sweep" << std::endl;
   auto geom = GeometryType::create();
   IRL::ReferenceFrame original_frame(IRL::Normal(1.0, 0.0, 0.0),
                                      IRL::Normal(0.0, 1.0, 0.0),
@@ -324,6 +328,11 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
 
       const double* start = read_data.data() + i * DOUBLES_IN_ONE_RUN;
 
+      std::cout << "Case " << cases_run + i << " = " << start[0] << " / "
+                << start[1] << " / " << start[2] << " / " << start[3] << " / "
+                << start[4] << " / " << start[5] << " / " << start[6] << " / "
+                << start[7] << std::endl;
+
       IRL::UnitQuaternion x_rotation(start[3], original_frame[0]);
       IRL::UnitQuaternion y_rotation(start[4], original_frame[1]);
       IRL::UnitQuaternion z_rotation(start[5], original_frame[2]);
@@ -333,15 +342,68 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
                                  start[6], start[7]);
       // std::cout << "Cube volume = " << geom.calculateVolume() << std::endl;
 
+      // auto geom1 = geom;
+
+      // {
+      //   std::cout << "Case " << cases_run + i << std::endl;
+      //   IRL::HalfEdgePolyhedronParaboloid<IRL::Pt> half_edge;
+      //   IRL::ReferenceFrame original_frame(IRL::Normal(1.0, 0.0, 0.0),
+      //                                      IRL::Normal(0.0, 1.0, 0.0),
+      //                                      IRL::Normal(0.0, 0.0, 1.0));
+      //   std::array<double, 3> angles{{start[3], start[4], start[5]}};
+      //   IRL::Pt translations(start[0], start[1], start[2]);
+      //   IRL::AlignedParaboloid aligned_paraboloid(
+      //       std::array<double, 2>({start[6], start[7]}));
+      //   IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
+      //   IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
+      //   IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
+      //   auto frame = x_rotation * y_rotation * z_rotation * original_frame;
+      //   for (auto& vertex : geom1) {
+      //     IRL::Pt tmp_pt = vertex + translations;
+      //     for (std::size_t d = 0; d < 3; ++d) {
+      //       vertex[d] = frame[d] * tmp_pt;
+      //     }
+      //   }
+
+      //   geom1.setHalfEdgeVersion(&half_edge);
+      //   auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
+
+      //   for (auto& face : seg_half_edge) {
+      //     auto normal = IRL::Normal(0.0, 0.0, 0.0);
+      //     const auto starting_half_edge = face->getStartingHalfEdge();
+      //     auto current_half_edge = starting_half_edge;
+      //     auto next_half_edge = starting_half_edge->getNextHalfEdge();
+      //     const auto& start_location =
+      //         starting_half_edge->getPreviousVertex()->getLocation();
+      //     do {
+      //       normal += IRL::crossProduct(
+      //           current_half_edge->getVertex()->getLocation() -
+      //           start_location, next_half_edge->getVertex()->getLocation() -
+      //           start_location);
+      //       current_half_edge = next_half_edge;
+      //       next_half_edge = next_half_edge->getNextHalfEdge();
+      //     } while (next_half_edge != starting_half_edge);
+      //     normal.normalize();
+      //     face->setPlane(IRL::Plane(normal, normal * start_location));
+      //   }
+
+      //   std::string poly_filename = "error_cell";
+      //   auto volume_moments =
+      //       IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
+      //           &seg_half_edge, &half_edge, aligned_paraboloid, 5,
+      //           poly_filename);
+      // }
+      // auto geom = geometry;
+
       double start_time = omp_get_wtime();
       auto moments =
           IRL::getVolumeMoments<IRL::VolumeMoments>(geom, paraboloid);
       double end_time = omp_get_wtime();
       results[9] += end_time - start_time;
 
-      // std::cout << "Volume = " << moments.volume() << " instead of " <<
-      // start[8]
-      //           << std::endl;
+      // std::cout << "Case " << cases_run + i
+      //           << " -- Volume = " << moments.volume() << " instead of "
+      //           << start[8] << std::endl;
 
       const double volume_err = std::fabs(moments.volume() - start[8]);
       results[0] += volume_err;
@@ -361,58 +423,84 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
       results[5] = std::max(results[5], err_x);
       results[5] = std::max(results[5], err_y);
       results[5] = std::max(results[5], err_z);
-      if (results[5] > 1.0e-10) {
-        std::cout << "Case " << i << " has moment error = " << results[5]
-                  << std::endl;
-        std::cout << "   Moments = " << moments.centroid() << std::endl;
-        std::cout << "insteaf of = " << amr_centroid << std::endl;
-        IRL::HalfEdgePolyhedronParaboloid<IRL::Pt> half_edge;
-        IRL::ReferenceFrame original_frame(IRL::Normal(1.0, 0.0, 0.0),
-                                           IRL::Normal(0.0, 1.0, 0.0),
-                                           IRL::Normal(0.0, 0.0, 1.0));
-        std::array<double, 3> angles{{start[3], start[4], start[5]}};
-        IRL::Pt translations(start[0], start[1], start[2]);
-        IRL::AlignedParaboloid aligned_paraboloid(
-            std::array<double, 2>({start[6], start[7]}));
-        IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
-        IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
-        IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
-        auto frame = x_rotation * y_rotation * z_rotation * original_frame;
-        for (auto& vertex : geom) {
-          IRL::Pt tmp_pt = vertex + translations;
-          for (std::size_t d = 0; d < 3; ++d) {
-            vertex[d] = frame[d] * tmp_pt;
-          }
-        }
+      // if (results[5] > 1.0e-12 || std::isnan(moments.volume()) ||
+      //     std::isnan(moments.centroid()[0]) ||
+      //     std::isnan(moments.centroid()[1]) ||
+      //     std::isnan(moments.centroid()[2])) {
+      //   std::cout << "Case " << cases_run + i
+      //             << " has volume error = " << volume_err
+      //             << " has moment error = " << results[5] << std::endl;
+      //   std::cout << "   Volume = " << moments.volume() << std::endl;
+      //   std::cout << "instead of = " << start[8] << std::endl;
+      //   std::cout << "   Moments = " << moments.centroid() << std::endl;
+      //   std::cout << "instead of = " << amr_centroid << std::endl;
+      //   IRL::HalfEdgePolyhedronParaboloid<IRL::Pt> half_edge;
+      //   IRL::ReferenceFrame original_frame(IRL::Normal(1.0, 0.0, 0.0),
+      //                                      IRL::Normal(0.0, 1.0, 0.0),
+      //                                      IRL::Normal(0.0, 0.0, 1.0));
+      //   std::array<double, 3> angles{{start[3], start[4], start[5]}};
+      //   IRL::Pt translations(start[0], start[1], start[2]);
+      //   IRL::AlignedParaboloid aligned_paraboloid(
+      //       std::array<double, 2>({start[6], start[7]}));
+      //   IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
+      //   IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
+      //   IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
+      //   auto frame = x_rotation * y_rotation * z_rotation * original_frame;
+      //   auto geom1 = GeometryType::create();
+      //   for (auto& vertex : geom1) {
+      //     IRL::Pt tmp_pt = vertex + translations;
+      //     for (std::size_t d = 0; d < 3; ++d) {
+      //       vertex[d] = frame[d] * tmp_pt;
+      //     }
+      //   }
 
-        geom.setHalfEdgeVersion(&half_edge);
-        auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
+      //   geom1.setHalfEdgeVersion(&half_edge);
+      //   auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
 
-        for (auto& face : seg_half_edge) {
-          auto normal = IRL::Normal(0.0, 0.0, 0.0);
-          const auto starting_half_edge = face->getStartingHalfEdge();
-          auto current_half_edge = starting_half_edge;
-          auto next_half_edge = starting_half_edge->getNextHalfEdge();
-          const auto& start_location =
-              starting_half_edge->getPreviousVertex()->getLocation();
-          do {
-            normal += IRL::crossProduct(
-                current_half_edge->getVertex()->getLocation() - start_location,
-                next_half_edge->getVertex()->getLocation() - start_location);
-            current_half_edge = next_half_edge;
-            next_half_edge = next_half_edge->getNextHalfEdge();
-          } while (next_half_edge != starting_half_edge);
-          normal.normalize();
-          face->setPlane(IRL::Plane(normal, normal * start_location));
-        }
+      //   for (auto& face : seg_half_edge) {
+      //     auto normal = IRL::Normal(0.0, 0.0, 0.0);
+      //     const auto starting_half_edge = face->getStartingHalfEdge();
+      //     auto current_half_edge = starting_half_edge;
+      //     auto next_half_edge = starting_half_edge->getNextHalfEdge();
+      //     const auto& start_location =
+      //         starting_half_edge->getPreviousVertex()->getLocation();
+      //     do {
+      //       normal += IRL::crossProduct(
+      //           current_half_edge->getVertex()->getLocation() -
+      //           start_location, next_half_edge->getVertex()->getLocation() -
+      //           start_location);
+      //       current_half_edge = next_half_edge;
+      //       next_half_edge = next_half_edge->getNextHalfEdge();
+      //     } while (next_half_edge != starting_half_edge);
+      //     normal.normalize();
+      //     face->setPlane(IRL::Plane(normal, normal * start_location));
+      //   }
 
-        std::string poly_filename = "error_cell";
-        auto volume_moments =
-            IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
-                &seg_half_edge, &half_edge, aligned_paraboloid, 10,
-                poly_filename);
-        exit(1);
-      }
+      //   std::string poly_filename = "error_cell";
+      //   auto volume_moments =
+      //       IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
+      //           &seg_half_edge, &half_edge, aligned_paraboloid, 10,
+      //           poly_filename);
+      //   // auto volume_moments =
+      //   //     IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
+      //   //         &seg_half_edge, &half_edge, aligned_paraboloid, 21);
+      //   auto centroid = IRL::Pt(0.0, 0.0, 0.0);
+      //   for (std::size_t d = 0; d < 3; ++d) {
+      //     for (std::size_t n = 0; n < 3; ++n) {
+      //       centroid[n] += frame[d][n] * volume_moments.centroid()[d];
+      //     }
+      //   }
+      //   // centroid -= translations;
+      //   centroid -= translations * volume_moments.volume();
+      //   volume_moments.centroid() = centroid;
+
+      //   std::cout << "   (AMR Moments = " << centroid << ")" << std::endl;
+      //   std::cout << " (Error Moments = "
+      //             << IRL::Pt(moments.centroid() - centroid) << ")" <<
+      //             std::endl;
+
+      //   exit(1);
+      // }
     }
     cases_run += batch_size;
   }

@@ -17,45 +17,44 @@
 #include "irl/geometry/polyhedrons/tet.h"
 #include "irl/parameters/defined_types.h"
 
-namespace IRL {
+namespace IRL{
 
 template <class Derived, class VertexType>
-class BunnySpecialization
-    : public BasePolyhedron<Derived, VertexType, ProxyTet<Derived>> {
- public:
-  HalfEdgePolyhedron<VertexType> generateHalfEdgeVersion(void) const;
+class BunnySpecialization: public BasePolyhedron<Derived, VertexType, ProxyTet<Derived>> {
+public: 
 
-  template <class HalfEdgePolyhedronType>
-  void setHalfEdgeVersion(HalfEdgePolyhedronType* a_half_edge_version) const;
+HalfEdgePolyhedron<VertexType> generateHalfEdgeVersion(void) const; 
 
-  static constexpr UnsignedIndex_t getNumberOfSimplicesInDecomposition(void);
+template<class HalfEdgePolyhedronType>
+void setHalfEdgeVersion(HalfEdgePolyhedronType* a_half_edge_version) const;
 
-  static constexpr std::array<UnsignedIndex_t, 4>
-  getSimplexIndicesFromDecomposition(const UnsignedIndex_t a_tet);
+static constexpr UnsignedIndex_t getNumberOfSimplicesInDecomposition(void);
 
-  ProxyTet<Derived> getSimplexFromDecomposition(
-      const UnsignedIndex_t a_tet) const;
-};
+static constexpr std::array<UnsignedIndex_t, 4> getSimplexIndicesFromDecomposition(const UnsignedIndex_t a_tet);
 
-template <class VertexType>
-class StoredBunny
-    : public StoredVertexAccess<StoredBunny<VertexType>, VertexType, 191274>,
-      public BunnySpecialization<StoredBunny<VertexType>, VertexType> {
-  friend StoredVertexAccess<StoredBunny<VertexType>, VertexType, 191274>;
+ProxyTet<Derived> getSimplexFromDecomposition(const UnsignedIndex_t a_tet) const;
 
- public:
-  using StoredVertexAccess<StoredBunny<VertexType>, VertexType,
-                           191274>::StoredVertexAccess;
-
-  StoredBunny(void) = default;
-};
-
-// Predefined types
-using Bunny = StoredBunny<Pt>;
+}; 
 
 template <class VertexType>
+class StoredBunny: public StoredVertexAccess<StoredBunny<VertexType>,VertexType,167891>, public BunnySpecialization<StoredBunny<VertexType>, VertexType>{
+friend StoredVertexAccess<StoredBunny<VertexType>,VertexType,167891>;
+
+public: 
+
+using StoredVertexAccess<StoredBunny<VertexType>,VertexType,167891>::StoredVertexAccess;
+
+StoredBunny(void) = default;
+}; 
+
+
+// Predefined types 
+using Bunny= StoredBunny<Pt>; 
+
+
+template<class VertexType>
 struct is_polyhedron<StoredBunny<VertexType>> : std::true_type {};
-}  // namespace IRL
+} // namespace IRL 
 
 #include "bunny.tpp"
-#endif  // SRC_GEOMETRY_POLYHEDRONS_BUNNY_H_
+#endif //SRC_GEOMETRY_POLYHEDRONS_BUNNY_H_
