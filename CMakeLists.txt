@@ -37,7 +37,7 @@ set_target_properties(amr_generate_result
   PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
   COMPILE_FLAGS "${CMAKE_CXX_FLAGS}"
-  INTERPROCEDURAL_OPTIMIZATION True
+  INTERPROCEDURAL_OPTIMIZATION False
   CXX_STANDARD 17)
 
 target_include_directories(amr_generate_result PRIVATE "./")
@@ -46,6 +46,8 @@ target_link_libraries(amr_generate_result PUBLIC "${IRL_INSTALL_LOCATION}/lib/li
 target_link_libraries(amr_generate_result PUBLIC "-lpthread")
 target_link_libraries(amr_generate_result PUBLIC MPI::MPI_CXX)
 target_link_libraries(amr_generate_result PUBLIC OpenMP::OpenMP_CXX)
+
+target_link_libraries(amr_generate_result PUBLIC "-lquadmath")
 
 if(APPLE)
   target_link_libraries(amr_generate_result PUBLIC "-framework CoreFoundation")
@@ -66,7 +68,7 @@ set_target_properties(irl_confirm_result
   PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
   COMPILE_FLAGS "${CMAKE_CXX_FLAGS}"
-  INTERPROCEDURAL_OPTIMIZATION True
+  INTERPROCEDURAL_OPTIMIZATION False
   CXX_STANDARD 17)
 
 target_include_directories(irl_confirm_result PRIVATE "./")
@@ -74,6 +76,8 @@ target_link_libraries(irl_confirm_result PUBLIC "${IRL_INSTALL_LOCATION}/lib/lib
 target_link_libraries(irl_confirm_result PUBLIC "${IRL_INSTALL_LOCATION}/lib/libabsl_all.a")
 target_link_libraries(irl_confirm_result PUBLIC "-lpthread")
 target_link_libraries(irl_confirm_result PUBLIC OpenMP::OpenMP_CXX)
+
+target_link_libraries(irl_confirm_result PUBLIC "-lquadmath")
 
 if(APPLE)
   target_link_libraries(irl_confirm_result PUBLIC "-framework CoreFoundation")
