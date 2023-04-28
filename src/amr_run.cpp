@@ -51,8 +51,9 @@ void runTranslatingCube(const double a_side_length,
     const double step = (a_range_vector[r][1] - a_range_vector[r][0]) /
                         static_cast<double>(a_step_vector[r] - 1);
     for (std::size_t i = 0; i < a_step_vector[r]; ++i) {
-      double k = (2.0 * h * h + h) *
-                 (a_range_vector[r][0] + static_cast<double>(i) * step);
+      // double k = (2.0 * h * h + h) *
+      //            (a_range_vector[r][0] + static_cast<double>(i) * step);
+      double k = static_cast<double>(i) * step;
       IRL::RectangularCuboid cube = IRL::RectangularCuboid::fromBoundingPts(
           IRL::Pt(0.0, 0.0, -k), IRL::Pt(h, h, h - k));
 
@@ -280,8 +281,7 @@ void runTranslatingCube(const double a_side_length,
                  std::atan(std::sqrt(-h - std::pow(h, 2.) + k) / h)) /
             180.;
       }
-      auto exact_centroid = IRL::Pt(exact_m1x, exact_m1x, exact_m1z) /
-                            IRL::safelyEpsilon(exact_volume);
+      auto exact_centroid = IRL::Pt(exact_m1x, exact_m1x, exact_m1z);
 
       // Write out k value and results
       // Total of 6 doubles
@@ -487,23 +487,6 @@ void runRandomSweep(const std::string& a_geometry,
                  1234 + rank, MPI_COMM_WORLD);
       }
     }
-
-    // // Write case and result to file
-    // // Translations, rotations, then coefficients (8 doubles total)
-    // a_out_file.write(reinterpret_cast<char*>(&translations[0]),
-    //                  sizeof(double) * 3);
-    // a_out_file.write(reinterpret_cast<char*>(&angles[0]), sizeof(double) *
-    // 3); a_out_file.write(reinterpret_cast<char*>(&aligned_paraboloid.a()),
-    //                  sizeof(double));
-    // a_out_file.write(reinterpret_cast<char*>(&aligned_paraboloid.b()),
-    //                  sizeof(double));
-    // // Volume and centroid (four doubles total)
-    // a_out_file.write(reinterpret_cast<char*>(&volume_moments.volume()),
-    //                  sizeof(double));
-    // a_out_file.write(reinterpret_cast<char*>(&centroid[0]), sizeof(double) *
-    // 3);
-    // // std::cout << "M0 = " << volume_moments.volume()
-    // //           << "; M1 = " << volume_moments.centroid() << std::endl;
   }
   if (rank == 0) {
     std::cout << "100% done" << std::endl;
@@ -677,9 +660,6 @@ void runOrganizedSweep(const std::string& a_geometry,
                         reinterpret_cast<char*>(&volume_moments.centroid()[d]),
                         sizeof(volume_moments.centroid()[d]));
                   }
-                  // std::cout << "M0 = " << volume_moments.volume()
-                  //           << "; M1 = " << volume_moments.centroid()
-                  //           << std::endl;
                 }
               }
             }
@@ -722,7 +702,7 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
     connectivity = new IRL::PolyhedronConnectivity(face_mapping);
   } else if (a_geometry == "dodecahedron") {
     const double tau = (sqrt(5.0) + 1.0) / 2.0;
-    std::array<IRL::Pt, 12> M{{IRL::Pt(0, tau, 1), IRL::Pt(0.0, -tau, 1.0),
+    std::array<IRL::Pt, 12> M{{IRL::Pt(0.0, tau, 1.0), IRL::Pt(0.0, -tau, 1.0),
                                IRL::Pt(0.0, tau, -1.0),
                                IRL::Pt(0.0, -tau, -1.0), IRL::Pt(1.0, 0.0, tau),
                                IRL::Pt(-1.0, 0.0, tau), IRL::Pt(1.0, 0.0, -tau),
@@ -800,6 +780,36 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
 
     connectivity = new IRL::PolyhedronConnectivity(face_mapping);
 
+  } else if (a_geometry == "cube_hole_convex") {
+    vertices = std::vector<IRL::Pt>{
+        {IRL::Pt(-0.5, -0.5, -0.5), IRL::Pt(-0.5, 0.5, -0.5),
+         IRL::Pt(-0.5, 0.5, 0.5), IRL::Pt(-0.5, -0.5, 0.5),
+         IRL::Pt(0.5, -0.5, -0.5), IRL::Pt(0.5, 0.5, -0.5),
+         IRL::Pt(0.5, 0.5, 0.5), IRL::Pt(0.5, -0.5, 0.5),
+         IRL::Pt(-0.25, 0.5, -0.25), IRL::Pt(-0.25, 0.5, 0.25),
+         IRL::Pt(0.25, 0.5, 0.25), IRL::Pt(0.25, 0.5, -0.25),
+         IRL::Pt(-0.25, -0.5, -0.25), IRL::Pt(-0.25, -0.5, 0.25),
+         IRL::Pt(0.25, -0.5, 0.25), IRL::Pt(0.25, -0.5, -0.25)}};
+
+    std::vector<std::vector<IRL::UnsignedIndex_t>> face_mapping(16);
+    face_mapping[0] = std::vector<IRL::UnsignedIndex_t>{{3, 2, 1, 0}};
+    face_mapping[1] = std::vector<IRL::UnsignedIndex_t>{{0, 1, 5, 4}};
+    face_mapping[2] = std::vector<IRL::UnsignedIndex_t>{{4, 5, 6, 7}};
+    face_mapping[3] = std::vector<IRL::UnsignedIndex_t>{{6, 2, 3, 7}};
+    face_mapping[4] = std::vector<IRL::UnsignedIndex_t>{{1, 2, 9, 8}};
+    face_mapping[5] = std::vector<IRL::UnsignedIndex_t>{{2, 6, 10, 9}};
+    face_mapping[6] = std::vector<IRL::UnsignedIndex_t>{{6, 5, 11, 10}};
+    face_mapping[7] = std::vector<IRL::UnsignedIndex_t>{{5, 1, 8, 11}};
+    face_mapping[8] = std::vector<IRL::UnsignedIndex_t>{{0, 4, 15, 12}};
+    face_mapping[9] = std::vector<IRL::UnsignedIndex_t>{{4, 7, 14, 15}};
+    face_mapping[10] = std::vector<IRL::UnsignedIndex_t>{{7, 3, 13, 14}};
+    face_mapping[11] = std::vector<IRL::UnsignedIndex_t>{{3, 0, 12, 13}};
+    face_mapping[12] = std::vector<IRL::UnsignedIndex_t>{{8, 9, 13, 12}};
+    face_mapping[13] = std::vector<IRL::UnsignedIndex_t>{{9, 10, 14, 13}};
+    face_mapping[14] = std::vector<IRL::UnsignedIndex_t>{{10, 11, 15, 14}};
+    face_mapping[15] = std::vector<IRL::UnsignedIndex_t>{{11, 8, 12, 15}};
+
+    connectivity = new IRL::PolyhedronConnectivity(face_mapping);
   } else if (a_geometry == "bunny") {
     std::ifstream myfile("../vtk_data/bunny.vtk");
     std::string line;
@@ -832,7 +842,7 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
                     std::stoi(words[3 * i + 2]))});
           }
         }
-        if (words.size() == 0) {
+        if (words.size() == 0 || words[0] == "METADATA") {
           read_points = false;
           read_connectivity = false;
         } else if (words[0] == "POINTS") {
@@ -850,7 +860,6 @@ std::pair<BasePolyhedron, IRL::PolyhedronConnectivity*> getGeometry(
               << std::endl;
     std::cout << "The bunny has " << face_mapping.size() << " triangles!"
               << std::endl;
-
     connectivity = new IRL::PolyhedronConnectivity(face_mapping);
   } else {
     std::cout << "Unkown geometry type \"" + a_geometry + "\"" << std::endl;
