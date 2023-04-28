@@ -18,6 +18,7 @@
 #include "irl/generic_cutting/generic_cutting.h"
 #include "irl/generic_cutting/paraboloid_intersection/paraboloid_intersection_amr.h"
 #include "irl/geometry/general/pt.h"
+#include "irl/geometry/polyhedrons/dodecahedron.h"
 #include "irl/geometry/polyhedrons/general_polyhedron.h"
 #include "irl/helpers/mymath.h"
 
@@ -42,6 +43,8 @@ std::array<double, 10> confirmTranslatingCubeResult(
   std::vector<double> read_data;
   std::array<double, 10> results{
       {0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0}};
+
+  std::cout << "k m0 m0_err m1x m1x_err m1z m1z_err m0s m0s_err" << std::endl;
   while (cases_run < a_run_size) {
     const std::size_t batch_size = cases_run + RUN_BATCH_SIZE <= a_run_size
                                        ? RUN_BATCH_SIZE
@@ -49,13 +52,7 @@ std::array<double, 10> confirmTranslatingCubeResult(
     read_data.resize(batch_size * DOUBLES_IN_ONE_RUN);
     a_results_file.read(reinterpret_cast<char*>(read_data.data()),
                         sizeof(double) * batch_size * DOUBLES_IN_ONE_RUN);
-
     for (std::size_t i = 0; i < batch_size; ++i) {
-      if ((cases_run + i) % update_frequency == 0) {
-        std::cout << static_cast<int>(static_cast<double>(cases_run + i) /
-                                      static_cast<double>(a_run_size) * 100.0)
-                  << "% done\n";
-      }
       const double* start = read_data.data() + i * DOUBLES_IN_ONE_RUN;
       const double k = start[0];
 
@@ -71,7 +68,6 @@ std::array<double, 10> confirmTranslatingCubeResult(
       const double end_time = omp_get_wtime();
       results[9] += end_time - start_time;
       auto& moments = volume_and_surface.getMoments();
-      moments.normalizeByVolume();
       auto& surface = volume_and_surface.getSurface();
 
       const double volume_err = std::fabs(moments.volume() - start[1]);
@@ -80,10 +76,14 @@ std::array<double, 10> confirmTranslatingCubeResult(
       results[2] = std::max(results[2], volume_err);
 
       auto amr_centroid = IRL::Pt::fromRawDoublePointer(start + 2);
-      const double err_dist = magnitude(moments.centroid() - amr_centroid);
-      results[3] += err_dist;
-      results[4] += err_dist * err_dist;
-      results[5] = std::max(results[5], err_dist);
+      const double err_x = std::fabs(moments.centroid()[0] - amr_centroid[0]);
+      const double err_y = std::fabs(moments.centroid()[1] - amr_centroid[1]);
+      const double err_z = std::fabs(moments.centroid()[2] - amr_centroid[2]);
+      results[3] += err_x + err_y + err_z;
+      results[4] += err_x * err_x + err_y * err_y + err_z * err_z;
+      results[5] = std::max(results[5], err_x);
+      results[5] = std::max(results[5], err_y);
+      results[5] = std::max(results[5], err_z);
 
       const double err_surf = std::fabs(surface.getSurfaceArea() - start[5]);
       results[6] += err_surf;
@@ -92,7 +92,6 @@ std::array<double, 10> confirmTranslatingCubeResult(
     }
     cases_run += batch_size;
   }
-  std::cout << "100% done\n";
   const double case_count = static_cast<double>(a_run_size);
   results[0] /= case_count;
   results[1] = std::sqrt(results[1]) / case_count;
@@ -142,7 +141,7 @@ struct DodecahedronCreator {
  public:
   static IRL::MyDodecahedron create(void) {
     double tau = (sqrt(5.0) + 1.0) / 2.0;
-    std::array<IRL::Pt, 12> M{{IRL::Pt(0, tau, 1), IRL::Pt(0.0, -tau, 1.0),
+    std::array<IRL::Pt, 12> M{{IRL::Pt(0.0, tau, 1.0), IRL::Pt(0.0, -tau, 1.0),
                                IRL::Pt(0.0, tau, -1.0),
                                IRL::Pt(0.0, -tau, -1.0), IRL::Pt(1.0, 0.0, tau),
                                IRL::Pt(-1.0, 0.0, tau), IRL::Pt(1.0, 0.0, -tau),
@@ -305,12 +304,14 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
                                      IRL::Normal(0.0, 0.0, 1.0));
 
   std::size_t update_frequency =
-      std::min(static_cast<std::size_t>(1000), a_run_size / 10);
+      std::min(static_cast<std::size_t>(500000), a_run_size / 10);
 
   std::size_t cases_run = 0;
   std::vector<double> read_data;
   std::array<double, 10> results{
       {0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0}};
+  double cases_elliptic = 0.0, cases_hyperbolic = 0.0, cases_parabolic = 0.0;
+  double time_elliptic = 0.0, time_hyperbolic = 0.0, time_parabolic = 0.0;
   while (cases_run < a_run_size) {
     const std::size_t batch_size = cases_run + RUN_BATCH_SIZE <= a_run_size
                                        ? RUN_BATCH_SIZE
@@ -328,11 +329,6 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
 
       const double* start = read_data.data() + i * DOUBLES_IN_ONE_RUN;
 
-      std::cout << "Case " << cases_run + i << " = " << start[0] << " / "
-                << start[1] << " / " << start[2] << " / " << start[3] << " / "
-                << start[4] << " / " << start[5] << " / " << start[6] << " / "
-                << start[7] << std::endl;
-
       IRL::UnitQuaternion x_rotation(start[3], original_frame[0]);
       IRL::UnitQuaternion y_rotation(start[4], original_frame[1]);
       IRL::UnitQuaternion z_rotation(start[5], original_frame[2]);
@@ -340,60 +336,6 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
 
       IRL::Paraboloid paraboloid(-IRL::Pt::fromRawDoublePointer(start), frame,
                                  start[6], start[7]);
-      // std::cout << "Cube volume = " << geom.calculateVolume() << std::endl;
-
-      // auto geom1 = geom;
-
-      // {
-      //   std::cout << "Case " << cases_run + i << std::endl;
-      //   IRL::HalfEdgePolyhedronParaboloid<IRL::Pt> half_edge;
-      //   IRL::ReferenceFrame original_frame(IRL::Normal(1.0, 0.0, 0.0),
-      //                                      IRL::Normal(0.0, 1.0, 0.0),
-      //                                      IRL::Normal(0.0, 0.0, 1.0));
-      //   std::array<double, 3> angles{{start[3], start[4], start[5]}};
-      //   IRL::Pt translations(start[0], start[1], start[2]);
-      //   IRL::AlignedParaboloid aligned_paraboloid(
-      //       std::array<double, 2>({start[6], start[7]}));
-      //   IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
-      //   IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
-      //   IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
-      //   auto frame = x_rotation * y_rotation * z_rotation * original_frame;
-      //   for (auto& vertex : geom1) {
-      //     IRL::Pt tmp_pt = vertex + translations;
-      //     for (std::size_t d = 0; d < 3; ++d) {
-      //       vertex[d] = frame[d] * tmp_pt;
-      //     }
-      //   }
-
-      //   geom1.setHalfEdgeVersion(&half_edge);
-      //   auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
-
-      //   for (auto& face : seg_half_edge) {
-      //     auto normal = IRL::Normal(0.0, 0.0, 0.0);
-      //     const auto starting_half_edge = face->getStartingHalfEdge();
-      //     auto current_half_edge = starting_half_edge;
-      //     auto next_half_edge = starting_half_edge->getNextHalfEdge();
-      //     const auto& start_location =
-      //         starting_half_edge->getPreviousVertex()->getLocation();
-      //     do {
-      //       normal += IRL::crossProduct(
-      //           current_half_edge->getVertex()->getLocation() -
-      //           start_location, next_half_edge->getVertex()->getLocation() -
-      //           start_location);
-      //       current_half_edge = next_half_edge;
-      //       next_half_edge = next_half_edge->getNextHalfEdge();
-      //     } while (next_half_edge != starting_half_edge);
-      //     normal.normalize();
-      //     face->setPlane(IRL::Plane(normal, normal * start_location));
-      //   }
-
-      //   std::string poly_filename = "error_cell";
-      //   auto volume_moments =
-      //       IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
-      //           &seg_half_edge, &half_edge, aligned_paraboloid, 5,
-      //           poly_filename);
-      // }
-      // auto geom = geometry;
 
       double start_time = omp_get_wtime();
       auto moments =
@@ -401,110 +343,57 @@ std::array<double, 10> performParameterSweep(const std::size_t a_run_size,
       double end_time = omp_get_wtime();
       results[9] += end_time - start_time;
 
-      // std::cout << "Case " << cases_run + i
-      //           << " -- Volume = " << moments.volume() << " instead of "
-      //           << start[8] << std::endl;
+      if (start[6] * start[7] > 0.0) {
+        time_elliptic += end_time - start_time;
+        cases_elliptic += 1.0;
+      } else if (start[6] * start[7] < 0.0) {
+        time_hyperbolic += end_time - start_time;
+        cases_hyperbolic += 1.0;
+      } else {
+        time_parabolic += end_time - start_time;
+        cases_parabolic += 1.0;
+      }
 
       const double volume_err = std::fabs(moments.volume() - start[8]);
       results[0] += volume_err;
       results[1] += volume_err * volume_err;
       results[2] = std::max(results[2], volume_err);
-
-      auto amr_centroid = IRL::Pt::fromRawDoublePointer(start + 9);
-      // const double err_dist = magnitude(moments.centroid() - amr_centroid);
-      // results[3] += err_dist;
-      // results[4] += err_dist * err_dist;
-      // results[5] = std::max(results[5], err_dist);
-      const double err_x = std::fabs(moments.centroid()[0] - amr_centroid[0]);
-      const double err_y = std::fabs(moments.centroid()[1] - amr_centroid[1]);
-      const double err_z = std::fabs(moments.centroid()[2] - amr_centroid[2]);
+      const double err_x = std::fabs(moments.centroid()[0] - start[9]);
+      const double err_y = std::fabs(moments.centroid()[1] - start[10]);
+      const double err_z = std::fabs(moments.centroid()[2] - start[11]);
       results[3] += err_x + err_y + err_z;
       results[4] += err_x * err_x + err_y * err_y + err_z * err_z;
       results[5] = std::max(results[5], err_x);
       results[5] = std::max(results[5], err_y);
       results[5] = std::max(results[5], err_z);
-      // if (results[5] > 1.0e-12 || std::isnan(moments.volume()) ||
-      //     std::isnan(moments.centroid()[0]) ||
-      //     std::isnan(moments.centroid()[1]) ||
-      //     std::isnan(moments.centroid()[2])) {
-      //   std::cout << "Case " << cases_run + i
-      //             << " has volume error = " << volume_err
-      //             << " has moment error = " << results[5] << std::endl;
-      //   std::cout << "   Volume = " << moments.volume() << std::endl;
-      //   std::cout << "instead of = " << start[8] << std::endl;
-      //   std::cout << "   Moments = " << moments.centroid() << std::endl;
-      //   std::cout << "instead of = " << amr_centroid << std::endl;
-      //   IRL::HalfEdgePolyhedronParaboloid<IRL::Pt> half_edge;
-      //   IRL::ReferenceFrame original_frame(IRL::Normal(1.0, 0.0, 0.0),
-      //                                      IRL::Normal(0.0, 1.0, 0.0),
-      //                                      IRL::Normal(0.0, 0.0, 1.0));
-      //   std::array<double, 3> angles{{start[3], start[4], start[5]}};
-      //   IRL::Pt translations(start[0], start[1], start[2]);
-      //   IRL::AlignedParaboloid aligned_paraboloid(
-      //       std::array<double, 2>({start[6], start[7]}));
-      //   IRL::UnitQuaternion x_rotation(angles[0], original_frame[0]);
-      //   IRL::UnitQuaternion y_rotation(angles[1], original_frame[1]);
-      //   IRL::UnitQuaternion z_rotation(angles[2], original_frame[2]);
-      //   auto frame = x_rotation * y_rotation * z_rotation * original_frame;
-      //   auto geom1 = GeometryType::create();
-      //   for (auto& vertex : geom1) {
-      //     IRL::Pt tmp_pt = vertex + translations;
-      //     for (std::size_t d = 0; d < 3; ++d) {
-      //       vertex[d] = frame[d] * tmp_pt;
-      //     }
-      //   }
-
-      //   geom1.setHalfEdgeVersion(&half_edge);
-      //   auto seg_half_edge = half_edge.generateSegmentedPolyhedron();
-
-      //   for (auto& face : seg_half_edge) {
-      //     auto normal = IRL::Normal(0.0, 0.0, 0.0);
-      //     const auto starting_half_edge = face->getStartingHalfEdge();
-      //     auto current_half_edge = starting_half_edge;
-      //     auto next_half_edge = starting_half_edge->getNextHalfEdge();
-      //     const auto& start_location =
-      //         starting_half_edge->getPreviousVertex()->getLocation();
-      //     do {
-      //       normal += IRL::crossProduct(
-      //           current_half_edge->getVertex()->getLocation() -
-      //           start_location, next_half_edge->getVertex()->getLocation() -
-      //           start_location);
-      //       current_half_edge = next_half_edge;
-      //       next_half_edge = next_half_edge->getNextHalfEdge();
-      //     } while (next_half_edge != starting_half_edge);
-      //     normal.normalize();
-      //     face->setPlane(IRL::Plane(normal, normal * start_location));
-      //   }
-
-      //   std::string poly_filename = "error_cell";
-      //   auto volume_moments =
-      //       IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
-      //           &seg_half_edge, &half_edge, aligned_paraboloid, 10,
-      //           poly_filename);
-      //   // auto volume_moments =
-      //   //     IRL::intersectPolyhedronWithParaboloidAMR<IRL::VolumeMoments>(
-      //   //         &seg_half_edge, &half_edge, aligned_paraboloid, 21);
-      //   auto centroid = IRL::Pt(0.0, 0.0, 0.0);
-      //   for (std::size_t d = 0; d < 3; ++d) {
-      //     for (std::size_t n = 0; n < 3; ++n) {
-      //       centroid[n] += frame[d][n] * volume_moments.centroid()[d];
-      //     }
-      //   }
-      //   // centroid -= translations;
-      //   centroid -= translations * volume_moments.volume();
-      //   volume_moments.centroid() = centroid;
-
-      //   std::cout << "   (AMR Moments = " << centroid << ")" << std::endl;
-      //   std::cout << " (Error Moments = "
-      //             << IRL::Pt(moments.centroid() - centroid) << ")" <<
-      //             std::endl;
-
-      //   exit(1);
-      // }
     }
     cases_run += batch_size;
   }
   std::cout << "100% done\n";
+  std::cout << "Elliptic cases   -> "
+            << 100.0 * cases_elliptic /
+                   (cases_elliptic + cases_hyperbolic + cases_parabolic)
+            << " %" << std::endl;
+  std::cout << "Elliptic time    -> "
+            << 100.0 * time_elliptic /
+                   (time_elliptic + time_hyperbolic + time_parabolic)
+            << " %" << std::endl;
+  std::cout << "Hyperbolic cases -> "
+            << 100.0 * cases_hyperbolic /
+                   (cases_elliptic + cases_hyperbolic + cases_parabolic)
+            << " %" << std::endl;
+  std::cout << "Hyperbolic time  -> "
+            << 100.0 * time_hyperbolic /
+                   (time_elliptic + time_hyperbolic + time_parabolic)
+            << " %" << std::endl;
+  std::cout << "Parabolic cases  -> "
+            << 100.0 * cases_parabolic /
+                   (cases_elliptic + cases_hyperbolic + cases_parabolic)
+            << " %" << std::endl;
+  std::cout << "Parabolic time   -> "
+            << 100.0 * time_parabolic /
+                   (time_elliptic + time_hyperbolic + time_parabolic)
+            << " %" << std::endl;
   const double case_count = static_cast<double>(a_run_size);
   results[0] /= case_count;
   results[1] = std::sqrt(results[1]) / case_count;
